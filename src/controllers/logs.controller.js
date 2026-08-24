@@ -1,11 +1,51 @@
 import * as logsService from "../services/logs.service.js";
 
+export async function uploadLogs(req, res) {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No log file uploaded' });
+    }
+
+    let parsedLogs = [];
+    const isCSV =
+      req.file.mimetype === 'text/csv' ||
+      req.file.originalname.toLowerCase().endsWith('.csv');
+
+    if (isCSV) {
+      parsedLogs = await parseCSVBuffer(req.file.buffer);
+    } else if (req.file.originalname.toLowerCase().endsWith('.json')) {
+      parsedLogs = JSON.parse(req.file.buffer.toString('utf-8'));
+      if (!Array.isArray(parsedLogs)) parsedLogs = [parsedLogs];
+    } else {
+      // Plaintext/raw log parser
+      parsedLogs = logsService.parseRawTextLogs(req.file.buffer.toString('utf-8'));
+    }
+
+    if (!parsedLogs.length) {
+      return res.status(400).json({ error: 'No valid log entries found in file' });
+    }
+
+    const savedLogs = await logsService.insertBatch(parsedLogs);
+    return res.status(200).json({
+      success: true,
+      count: savedLogs.length,
+      logs: savedLogs
+    });
+  } catch (error) {
+    console.error('Log upload error:', error);
+    return res.status(500).json({ error: error.message });
+  }
+}
+
 export async function postLogs(req, res) {
   try {
+    console.log("hit")
     const result = await logsService.ingestLogs(req.body);
+    console.log("result ", result);
     if (result.empty) {
       return res.status(400).json({ error: "Empty dataset: no log entries were provided." });
     }
+    console.log("result ", result)
     res.status(201).json(result);
   } catch (err) {
     console.error("[postLogs]", err);
