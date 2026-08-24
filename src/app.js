@@ -25,6 +25,7 @@ app.get("/api/health", (req, res) => {
   res.status(200).json({
     ok: true,
     service: "smart-log-analyzer-backend",
+    uptime: process.uptime()
   });
 });
 
