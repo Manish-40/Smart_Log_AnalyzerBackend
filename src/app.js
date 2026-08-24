@@ -15,10 +15,19 @@ app.use(
     origin: allowedOrigins.includes("*") ? true : allowedOrigins,
   })
 );
+
 app.use(express.json({ limit: "5mb" }));
 
-// Make sure tables exist before handling any request (cheap no-op after
-// the first successful run, since schema.sql uses IF NOT EXISTS).
+// Health check should NOT depend on database
+app.get("/api/health", (req, res) => {
+  console.log("[health check]");
+  return res.status(200).json({
+    ok: true,
+    service: "smart-log-analyzer-backend",
+  });
+});
+
+// DB initialization only for actual API requests
 app.use(async (req, res, next) => {
   try {
     await ensureSchema();
@@ -26,16 +35,17 @@ app.use(async (req, res, next) => {
     next();
   } catch (err) {
     console.error("[schema init]", err);
-    res.status(500).json({ error: "Database not reachable", detail: err.message });
+    return res.status(500).json({
+      error: "Database not reachable",
+      detail: err.message,
+    });
   }
 });
 
-app.get("/api/health", (req, res) => {
-  console.log("[health check]");
-  res.json({ ok: true })
-});
 app.use("/api", logsRouter);
 
-app.use((req, res) => res.status(404).json({ error: "Not found" }));
+app.use((req, res) => {
+  return res.status(404).json({ error: "Not found" });
+});
 
 export default app;
