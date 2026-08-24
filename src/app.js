@@ -18,23 +18,29 @@ app.use(
 
 app.use(express.json({ limit: "5mb" }));
 
-// Health check should NOT depend on database
+// IMPORTANT: health check MUST be before database middleware
 app.get("/api/health", (req, res) => {
-  console.log("[health check]");
-  return res.status(200).json({
+  console.log("[health check] /api/health");
+
+  res.status(200).json({
     ok: true,
     service: "smart-log-analyzer-backend",
   });
 });
 
-// DB initialization only for actual API requests
+// Database initialization only for actual API requests
 app.use(async (req, res, next) => {
   try {
     await ensureSchema();
-    console.log("[schema init] schema exists, proceeding to request handler");
+
+    console.log(
+      "[schema init] schema exists, proceeding to request handler"
+    );
+
     next();
   } catch (err) {
     console.error("[schema init]", err);
+
     return res.status(500).json({
       error: "Database not reachable",
       detail: err.message,
@@ -45,7 +51,9 @@ app.use(async (req, res, next) => {
 app.use("/api", logsRouter);
 
 app.use((req, res) => {
-  return res.status(404).json({ error: "Not found" });
+  res.status(404).json({
+    error: "Not found",
+  });
 });
 
 export default app;
