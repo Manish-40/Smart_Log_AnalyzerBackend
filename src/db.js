@@ -22,15 +22,33 @@ export const pool = new Pool({
 
 let initPromise = null;
 
-// Runs schema.sql once (idempotent thanks to IF NOT EXISTS). Safe to call
-// on every cold start of a serverless function.
+// Arbitrary fixed number used as the advisory lock key. Any bigint works,
+// it just needs to be consistent across all instances of this app.
+const SCHEMA_LOCK_KEY = 727271;
+
+// Runs schema.sql once per warm instance (cached in initPromise). Guarded
+// by a Postgres advisory lock so that concurrent COLD STARTS -- which each
+// have their own initPromise = null -- don't race to run
+// `CREATE TABLE IF NOT EXISTS` at the same time. That race is what caused
+// the intermittent "type already exists" (42710) error: Postgres auto-
+// creates a row type alongside every table, and IF NOT EXISTS is not
+// concurrency-safe against that.
 export function ensureSchema() {
   if (!initPromise) {
-    const schema = fs.readFileSync(
-      path.join(__dirname, "schema.sql"),
-      "utf8"
-    );
-    initPromise = pool.query(schema).catch((err) => {
+    initPromise = (async () => {
+      const client = await pool.connect();
+      try {
+        await client.query("SELECT pg_advisory_lock($1)", [SCHEMA_LOCK_KEY]);
+        const schema = fs.readFileSync(
+          path.join(__dirname, "schema.sql"),
+          "utf8"
+        );
+        await client.query(schema);
+      } finally {
+        await client.query("SELECT pg_advisory_unlock($1)", [SCHEMA_LOCK_KEY]);
+        client.release();
+      }
+    })().catch((err) => {
       initPromise = null; // allow retry on next request
       throw err;
     });
