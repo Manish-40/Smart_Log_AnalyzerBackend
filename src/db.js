@@ -34,6 +34,7 @@ const SCHEMA_LOCK_KEY = 727271;
 // creates a row type alongside every table, and IF NOT EXISTS is not
 // concurrency-safe against that.
 export function ensureSchema() {
+  console.log("[schema init] ensuring schema exists");
   if (!initPromise) {
     initPromise = (async () => {
       const client = await pool.connect();
@@ -45,10 +46,12 @@ export function ensureSchema() {
         );
         await client.query(schema);
       } finally {
+        console.log("[schema init] releasing advisory lock");
         await client.query("SELECT pg_advisory_unlock($1)", [SCHEMA_LOCK_KEY]);
         client.release();
       }
     })().catch((err) => {
+      console.error("[schema init] failed to ensure schema exists", err);
       initPromise = null; // allow retry on next request
       throw err;
     });

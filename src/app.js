@@ -22,6 +22,7 @@ app.use(express.json({ limit: "5mb" }));
 app.use(async (req, res, next) => {
   try {
     await ensureSchema();
+    console.log("[schema init] schema exists, proceeding to request handler");
     next();
   } catch (err) {
     console.error("[schema init]", err);
@@ -29,7 +30,10 @@ app.use(async (req, res, next) => {
   }
 });
 
-app.get("/api/health", (req, res) => res.json({ ok: true }));
+app.get("/api/health", (req, res) => {
+  console.log("[health check]");
+  res.json({ ok: true })
+});
 app.use("/api", logsRouter);
 
 app.use((req, res) => res.status(404).json({ error: "Not found" }));
